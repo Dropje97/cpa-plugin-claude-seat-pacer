@@ -90,6 +90,28 @@ func TestHistoryReplacesAReadingWithinAMinute(t *testing.T) {
 	}
 }
 
+func TestHistoryKeepsAMinuteSpacingUnderSteadyTraffic(t *testing.T) {
+	s := NewStore()
+	resets := testNow.Add(3 * time.Hour)
+	// A header reading every 20 seconds for an hour, rising a point every
+	// five minutes: a busy seat never pauses long enough to leave a minute
+	// between two readings.
+	for i := 0; i <= 180; i++ {
+		at := testNow.Add(time.Duration(i) * 20 * time.Second)
+		s.MergeHeaders("auth-1", []model.Window{sessionAt(0.10+float64(i/15)/100, resets)}, at)
+	}
+	h := historyOf(t, s, "auth-1", model.WindowSession)
+	samples := h.Cycles[0].Samples
+	if len(samples) < 12 {
+		t.Fatalf("samples = %d, want every five-minute rise kept", len(samples))
+	}
+	for i := 1; i < len(samples); i++ {
+		if samples[i].Utilization-samples[i-1].Utilization > 0.0101 {
+			t.Errorf("rise %.2f -> %.2f at %v, want each one-point step drawn", samples[i-1].Utilization, samples[i].Utilization, samples[i].At)
+		}
+	}
+}
+
 func TestHistoryOpensACycleAtAReset(t *testing.T) {
 	s := NewStore()
 	first := testNow.Add(time.Hour)
