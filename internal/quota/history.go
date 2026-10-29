@@ -114,7 +114,10 @@ func (f *pendingFall) after(r *ring) *pendingFall {
 // does one taken more than resetTolerance past the current cycle's reset and
 // one taken after the provider cleared the window; one whose utilization
 // matches the last two samples extends the flat run by moving its end
-// forward; one within historyFineStep of the last sample replaces it.
+// forward; one in the same historyFineStep bucket as the last sample replaces
+// it. The bucket is fixed rather than measured from the last sample, whose
+// instant each replacement moves: readings less than a step apart would
+// otherwise keep replacing one sample for as long as traffic lasts.
 //
 // A clearing takes two readings: the first to fall clearDrop under the
 // cycle's level is held back, and it opens a cycle only when the next reading
@@ -220,7 +223,7 @@ func (r *ring) add(at time.Time, w model.Window, estimated bool) bool {
 		until := last.At
 		c.Estimated, c.EstimatedUntil = false, &until
 		c.Samples = append(c.Samples, s)
-	case s.At.Sub(last.At) < historyFineStep:
+	case s.At.Truncate(historyFineStep).Equal(last.At.Truncate(historyFineStep)):
 		*last = s
 	case len(c.Samples) >= 2 && last.Utilization == s.Utilization && c.Samples[len(c.Samples)-2].Utilization == s.Utilization:
 		last.At = s.At
